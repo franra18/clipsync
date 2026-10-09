@@ -1,5 +1,3 @@
 /apps/backend/venv
 .env.example
-apps/backend/clip_prueba.mp4
-apps/backend/raw_stream.mp4
-apps/backend/stream_vertical.mp4
+apps/backend/stream_subtitled.mp4
