@@ -1,3 +1,4 @@
 /apps/backend/venv
 .env.example
 apps/backend/stream_subtitled.mp4
+__pycache__/

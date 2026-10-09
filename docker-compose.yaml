@@ -1,4 +1,3 @@
-
 services:
   minio:
     image: chainguard/minio:latest
@@ -19,6 +18,48 @@ services:
     container_name: clipssync-redis
     ports:
       - "6379:6379"
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile
+    container_name: clipssync-worker
+    command: python3 -m src.worker.main
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_ACCESS_KEY=admin
+      - MINIO_SECRET_KEY=password123
+      - PYTHONPATH=/app
+    volumes:
+      - ./apps/backend:/app
+    depends_on:
+      - redis
+      - minio
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile
+    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
+    container_name: clipssync-api
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_ACCESS_KEY=admin
+      - MINIO_SECRET_KEY=password123
+      - PYTHONPATH=/app
+    volumes:
+      - ./apps/backend:/app
+    depends_on:
+      - redis
+      - minio
     restart: unless-stopped
 
 volumes:

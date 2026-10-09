@@ -19,7 +19,7 @@ RUN wget -q https://raw.githubusercontent.com/opencv/opencv_3rdparty/dnn_samples
     && wget -q https://raw.githubusercontent.com/opencv/opencv/master/samples/dnn/face_detector/deploy.prototxt -O /app/deploy.prototxt
 
 # Fijamos 'av' e instalamos redis + boto3
-RUN pip3 install --no-cache-dir --break-system-packages "av>=12.0.0,<13.0.0" yt-dlp faster-whisper redis boto3
+RUN pip3 install --no-cache-dir --break-system-packages "av>=12.0.0,<13.0.0" yt-dlp faster-whisper redis boto3 fastapi uvicorn
 
 COPY test_clip.py .
 

@@ -1,17 +1,15 @@
-from fastapi import FastAPI, BackgroundTasks
-from pydantic import BaseModel, HttpUrl
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from src.api.routes.clips import router as clips_router
 
-app = FastAPI(title="ClipsSync API")
+app = FastAPI(title="ClipsSync API", version="1.0.0")
 
-class ClipJobRequest(BaseModel):
-    video_url: HttpUrl
-    start_time: str  # Formato "02:15"
-    end_time: str    # Formato "02:40"
-    vertical_reframe: bool = False
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-@app.post("/api/jobs")
-async def create_clip_job(job: ClipJobRequest):
-    # 1. Generar un job_id único (UUID)
-    # 2. Guardar estado 'PENDING' en Redis
-    # 3. Enviar a la cola para que el Worker lo procese
-    return {"job_id": "temp-id-123", "status": "QUEUED"}
+app.include_router(clips_router)
