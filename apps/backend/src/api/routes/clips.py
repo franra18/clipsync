@@ -9,7 +9,7 @@ from src.core.config import REDIS_HOST, REDIS_PORT
 from src.core.storage import generate_presigned_download_url
 
 router = APIRouter(prefix="/api/clips", tags=["Clips"])
-redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=0)
+redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=0, decode_responses=True)
 
 class ClipCreateRequest(BaseModel):
     video_url: HttpUrl
@@ -36,16 +36,22 @@ def create_clip(payload: ClipCreateRequest):
     
     return ClipResponse(job_id=job_id, status="QUEUED")
 
-@router.get("/{job_id}", response_model=ClipResponse)
+@router.get("/{job_id}")
 def get_clip_status(job_id: str):
-    job_info = redis_client.hgetall(f"job:{job_id}")
-    if not job_info:
-        raise HTTPException(status_code=404, detail="Trabajo no encontrado")
-
-    status = job_info.get(b"status", b"UNKNOWN").decode("utf-8")
+    job_data = redis_client.hgetall(f"job:{job_id}")
+    if not job_data:
+        raise HTTPException(status_code=404, detail="Job no encontrado")
+    
+    status = job_data.get("status", "").upper()
     download_url = None
 
-    if status == "COMPLETED":
-        download_url = generate_presigned_download_url(f"clips/{job_id}.mp4")
+    # Generar la URL firmada de MinIO dinámicamente al finalizar
+    if status == "COMPLETED" and "object_name" in job_data:
+        raw_url = generate_presigned_download_url(job_data["object_name"])
+        download_url = raw_url.replace("http://minio:9000", "http://localhost:9000")
 
-    return ClipResponse(job_id=job_id, status=status, download_url=download_url)
+    return {
+        "job_id": job_id,
+        "status": status,
+        "download_url": download_url,
+    }

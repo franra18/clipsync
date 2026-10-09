@@ -77,10 +77,13 @@ def format_time_ass(seconds: float) -> str:
     hours = int(seconds) // 3600
     return f"{hours}:{mins:02}:{secs:02}.{centisecs:02}"
 
-def download_clip_segment(video_url: str, start_time: str, end_time: str, raw_path: Path) -> None:
-    """Descarga el rango de tiempo seleccionado mediante yt-dlp."""
+
+def download_clip_segment(
+    video_url: str, start_time: str, end_time: str, raw_path: Path
+) -> None:
+    """Descarga la mejor calidad disponible (1080p+) con compatibilidad de codecs."""
     ydl_opts = {
-        "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+        "format": "bestvideo[height>=1080][ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best",
         "outtmpl": str(raw_path),
         "download_ranges": yt_dlp.utils.download_range_func(
             None, [(to_seconds(start_time), to_seconds(end_time))]
@@ -197,31 +200,47 @@ def render_vertical_clip(raw_path: Path, ass_path: Path, output_path: Path) -> N
 
     filter_complex = (
         f"[0:v]crop={crop_w}:{crop_h}:{crop_x}:{crop_y},"
-        f"scale={OUTPUT_WIDTH}:{CAM_HEIGHT}:force_original_aspect_ratio=increase,"
+        f"scale={OUTPUT_WIDTH}:{CAM_HEIGHT}:force_original_aspect_ratio=increase:flags=lanczos,"
         f"crop={OUTPUT_WIDTH}:{CAM_HEIGHT}[cam];"
-        f"[0:v]scale={OUTPUT_WIDTH}:{GAME_HEIGHT}:force_original_aspect_ratio=increase,"
+        f"[0:v]scale={OUTPUT_WIDTH}:{GAME_HEIGHT}:force_original_aspect_ratio=increase:flags=lanczos,"
         f"crop={OUTPUT_WIDTH}:{GAME_HEIGHT}[game];"
         f"[cam][game]vstack=inputs=2,"
         f"ass='{ass_path}'[outv]"
     )
 
     cmd = [
-        "ffmpeg", "-y",
-        "-i", str(raw_path),
-        "-filter_complex", filter_complex,
-        "-map", "[outv]",
-        "-map", "0:a?",
-        "-c:v", "libx264",
-        "-preset", "veryfast",
-        "-c:a", "aac",
-        str(output_path)
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(raw_path),
+        "-filter_complex",
+        filter_complex,
+        "-map",
+        "[outv]",
+        "-map",
+        "0:a?",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "fast",
+        "-crf",
+        "18",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "192k",
+        str(output_path),
     ]
     subprocess.run(
         cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
     )
 
 
-def process_video_pipeline(job_id: str, video_url: str, start_time: str, end_time: str) -> str:
+def process_video_pipeline(
+    job_id: str, video_url: str, start_time: str, end_time: str
+) -> str:
     """Orquestador completo del procesamiento de vídeo y subida a MinIO."""
     temp_dir = Path(f"/tmp/clip_{job_id}")
     temp_dir.mkdir(parents=True, exist_ok=True)
@@ -236,7 +255,9 @@ def process_video_pipeline(job_id: str, video_url: str, start_time: str, end_tim
         render_vertical_clip(raw_video, ass_file, final_output)
 
         object_name = f"clips/{job_id}.mp4"
-        s3_client.upload_file(Filename=str(final_output), Bucket=MINIO_BUCKET, Key=object_name)
+        s3_client.upload_file(
+            Filename=str(final_output), Bucket=MINIO_BUCKET, Key=object_name
+        )
         return object_name
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)

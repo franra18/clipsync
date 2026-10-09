@@ -2,3 +2,4 @@
 .env.example
 apps/backend/stream_subtitled.mp4
 __pycache__/
+/apps/frontend/node_modules
