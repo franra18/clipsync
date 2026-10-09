@@ -1,10 +1,14 @@
 import os
+import json
+import time
 import subprocess
 import shutil
 from pathlib import Path
-from typing import Tuple, List, Optional
+from typing import Tuple, Optional
 import cv2
 import yt_dlp
+import redis
+import boto3
 from faster_whisper import WhisperModel
 
 # ==========================================
@@ -13,7 +17,7 @@ from faster_whisper import WhisperModel
 OUTPUT_WIDTH = 1080
 OUTPUT_HEIGHT = 1920
 CAM_HEIGHT = 720
-GAME_HEIGHT = OUTPUT_HEIGHT - CAM_HEIGHT  # 1200px
+GAME_HEIGHT = OUTPUT_HEIGHT - CAM_HEIGHT
 
 MODEL_PROTO_PATH = Path("/app/deploy.prototxt")
 MODEL_CAFFE_PATH = Path("/app/res10_300x300_ssd_iter_140000.caffemodel")
@@ -21,6 +25,24 @@ MODEL_CAFFE_PATH = Path("/app/res10_300x300_ssd_iter_140000.caffemodel")
 # Cargamos el modelo DNN una sola vez a nivel de módulo (o singleton)
 FACE_NET = cv2.dnn.readNetFromCaffe(str(MODEL_PROTO_PATH), str(MODEL_CAFFE_PATH))
 
+# Carga inicial de Whisper en memoria
+WHISPER_MODEL = WhisperModel("base", device="cpu", compute_type="int8")
+
+# Configuración de Redis y MinIO vía variables de entorno (con fallback local)
+REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
+REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
+
+MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "http://localhost:9000")
+MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "admin")
+MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "password123")
+MINIO_BUCKET = os.getenv("MINIO_BUCKET", "clips-storage")
+
+s3_client = boto3.client(
+    's3',
+    endpoint_url=MINIO_ENDPOINT,
+    aws_access_key_id=MINIO_ACCESS_KEY,
+    aws_secret_access_key=MINIO_SECRET_KEY
+)
 
 def to_seconds(time_str: str) -> int:
     """Convierte cadenas de tiempo (MM:SS / HH:MM:SS) a segundos."""
@@ -108,11 +130,9 @@ def detect_face_bbox(video_path: Path, max_frames: int = 150) -> Tuple[int, int,
 def generate_subtitles_ass(
     audio_video_path: Path, 
     ass_output_path: Path, 
-    whisper_model: WhisperModel, 
     words_per_chunk: int = 2
 ) -> None:
-    """Genera subtítulos animados .ass en bloques de palabras."""
-    segments, _ = whisper_model.transcribe(str(audio_video_path), beam_size=5, word_timestamps=True)
+    segments, _ = WHISPER_MODEL.transcribe(str(audio_video_path), beam_size=5, word_timestamps=True)
 
     words_list = [w for segment in segments if segment.words for w in segment.words]
     if not words_list:
@@ -172,36 +192,58 @@ def render_vertical_clip(raw_path: Path, ass_path: Path, output_path: Path) -> N
     ]
     subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
+def upload_to_minio(local_file: Path, object_name: str) -> str:
+    s3_client.upload_file(str(local_file), MINIO_BUCKET, object_name)
+    return f"{MINIO_ENDPOINT}/{MINIO_BUCKET}/{object_name}"
 
-def process_video_pipeline(video_url: str, start_time: str, end_time: str, output_path: Path) -> None:
-    """Orquestador principal que gestiona archivos temporales y ejecuta la tubería completa."""
-    temp_dir = Path("/tmp/clip_processing")
+def process_video_job(job_data: dict) -> None:
+    job_id = job_data["job_id"]
+    video_url = job_data["video_url"]
+    start_time = job_data["start_time"]
+    end_time = job_data["end_time"]
+
+    temp_dir = Path(f"/tmp/clip_{job_id}")
     temp_dir.mkdir(parents=True, exist_ok=True)
 
     raw_video = temp_dir / "raw.mp4"
     ass_file = temp_dir / "subtitles.ass"
+    final_output = temp_dir / f"{job_id}.mp4"
 
     try:
-        print("1/3 Descargando clip...")
+        print(f"[{job_id}] 1/4 Descargando...")
         download_clip_segment(video_url, start_time, end_time, raw_video)
 
-        print("2/3 Procesando subtítulos...")
-        whisper_model = WhisperModel("base", device="cpu", compute_type="int8")
-        generate_subtitles_ass(raw_video, ass_file, whisper_model)
+        print(f"[{job_id}] 2/4 Generando subtítulos...")
+        generate_subtitles_ass(raw_video, ass_file)
 
-        print("3/3 Renderizando formato vertical final...")
-        render_vertical_clip(raw_video, ass_file, output_path)
-        print(f"¡Clip completado con éxito! Guardado en: {output_path}")
+        print(f"[{job_id}] 3/4 Renderizando vídeo...")
+        render_vertical_clip(raw_video, ass_file, final_output)
+
+        print(f"[{job_id}] 4/4 Subiendo a MinIO...")
+        object_name = f"clips/{job_id}.mp4"
+        file_url = upload_to_minio(final_output, object_name)
+        
+        print(f"[{job_id}] ¡Proceso completado! Disponible en: {file_url}")
 
     finally:
         # Limpieza de archivos temporales intermediarios
         shutil.rmtree(temp_dir, ignore_errors=True)
 
+def start_worker():
+    print(f"Conectando a Redis en {REDIS_HOST}:{REDIS_PORT}...")
+    r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=0)
+
+    print("🚀 Worker iniciado y escuchando la cola 'clip_jobs'...")
+    while True:
+        try:
+            # blpop espera bloqueando hasta que entra un elemento a la cola 'clip_jobs'
+            _, message = r.blpop("clip_jobs")
+            job_data = json.loads(message.decode("utf-8"))
+            print(f"\nTrabajo recibido: {job_data['job_id']}")
+            process_video_job(job_data)
+        except Exception as e:
+            print(f"Error procesando trabajo: {e}")
+            time.sleep(1)
 
 if __name__ == "__main__":
-    process_video_pipeline(
-        video_url="https://www.youtube.com/watch?v=zQyrhjEAqLs",
-        start_time="00:05",
-        end_time="00:15",
-        output_path=Path("/output/stream_subtitled.mp4")
-    )
+    start_worker()
