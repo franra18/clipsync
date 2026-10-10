@@ -83,7 +83,7 @@ def download_clip_segment(
 ) -> None:
     """Descarga la mejor calidad disponible (1080p+) con compatibilidad de codecs."""
     ydl_opts = {
-        "format": "bestvideo[height>=1080][ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best",
+        "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best",
         "outtmpl": str(raw_path),
         "download_ranges": yt_dlp.utils.download_range_func(
             None, [(to_seconds(start_time), to_seconds(end_time))]
@@ -133,7 +133,7 @@ def detect_face_bbox(video_path: Path, max_frames: int = 150) -> Tuple[int, int,
                         continue
 
                     max_confidence = confidence
-                    pad_w, pad_h = int(w * 1.0), int(h * 1.0)
+                    pad_w, pad_h = int(w * 2), int(h * 2)
                     crop_x = max(0, x1 - pad_w // 2)
                     crop_y = max(0, y1 - pad_h // 2)
                     crop_w = min(width - crop_x, w + pad_w)
@@ -222,7 +222,7 @@ def render_vertical_clip(raw_path: Path, ass_path: Path, output_path: Path) -> N
         "-c:v",
         "libx264",
         "-preset",
-        "fast",
+        "ultrafast",
         "-crf",
         "18",
         "-pix_fmt",
