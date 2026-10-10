@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from src.api.routes.clips import router as clips_router
 
-app = FastAPI(title="ClipsSync API", version="1.0.0")
+app = FastAPI(title="ClipSync API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,

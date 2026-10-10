@@ -85,7 +85,7 @@ export default function App() {
                     <Sparkles className="w-4 h-4" /> Generador de Verticales 9:16
                 </div>
                 <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
-                    ClipsSync
+                    ClipSync
                 </h1>
                 <p className="mt-2 text-slate-400 text-lg">
                     Convierte directos de YouTube/Twitch en clips verticales listos para TikTok o Reels.

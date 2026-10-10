@@ -1,7 +1,7 @@
 services:
   minio:
     image: chainguard/minio:latest
-    container_name: clipssync-minio
+    container_name: clipsync-minio
     command: server /data --console-address ":9001"
     ports:
       - "9000:9000"
@@ -15,7 +15,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: clipssync-redis
+    container_name: clipsync-redis
     ports:
       - "6379:6379"
     restart: unless-stopped
@@ -24,7 +24,7 @@ services:
     build:
       context: ./apps/backend
       dockerfile: Dockerfile
-    container_name: clipssync-worker
+    container_name: clipsync-worker
     command: python3 -m src.worker.main
     environment:
       - REDIS_HOST=redis
@@ -45,7 +45,7 @@ services:
       context: ./apps/backend
       dockerfile: Dockerfile
     command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
-    container_name: clipssync-api
+    container_name: clipsync-api
     ports:
       - "8000:8000"
     environment:
@@ -64,7 +64,7 @@ services:
 
   frontend:
     image: node:20-alpine
-    container_name: clipssync-frontend
+    container_name: clipsync-frontend
     working_dir: /app
     command: sh -c "corepack enable && pnpm install && pnpm dev"
     ports:
