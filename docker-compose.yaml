@@ -25,7 +25,7 @@ services:
       context: ./apps/backend
       dockerfile: Dockerfile
     container_name: clipsync-worker
-    command: python3 -m src.worker.main
+    command: python -m src.worker.main
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
@@ -66,11 +66,12 @@ services:
     image: node:20-alpine
     container_name: clipsync-frontend
     working_dir: /app
-    command: sh -c "corepack enable && pnpm install && pnpm dev"
+    command: sh -c "corepack enable && pnpm install && pnpm dev --host"
     ports:
       - "5173:5173"
     volumes:
       - ./apps/frontend:/app
+      - /app/node_modules
     depends_on:
       - api
     restart: unless-stopped

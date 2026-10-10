@@ -20,7 +20,7 @@ OUTPUT_HEIGHT = 1920
 CAM_HEIGHT = 720
 GAME_HEIGHT = OUTPUT_HEIGHT - CAM_HEIGHT  # 1200px
 
-MODEL_DIR = Path("/tmp/models")
+MODEL_DIR = Path(os.environ.get("MODEL_DIR", "/app"))
 MODEL_PROTO_PATH = MODEL_DIR / "deploy.prototxt"
 MODEL_CAFFE_PATH = MODEL_DIR / "res10_300x300_ssd_iter_140000.caffemodel"
 
