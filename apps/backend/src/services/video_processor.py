@@ -21,8 +21,14 @@ CAM_HEIGHT = 720
 GAME_HEIGHT = OUTPUT_HEIGHT - CAM_HEIGHT  # 1200px
 
 MODEL_DIR = Path(os.environ.get("MODEL_DIR", "/app"))
-MODEL_PROTO_PATH = MODEL_DIR / "deploy.prototxt"
-MODEL_CAFFE_PATH = MODEL_DIR / "res10_300x300_ssd_iter_140000.caffemodel"
+MODEL_PROTO_PATH = Path(
+    os.environ.get("MODEL_PROTO_PATH", MODEL_DIR / "deploy.prototxt")
+)
+MODEL_CAFFE_PATH = Path(
+    os.environ.get(
+        "MODEL_CAFFE_PATH", MODEL_DIR / "res10_300x300_ssd_iter_140000.caffemodel"
+    )
+)
 
 # Carga única de Whisper en memoria para reutilizar el modelo
 WHISPER_MODEL = WhisperModel("base", device="cpu", compute_type="int8")
@@ -103,7 +109,7 @@ def detect_face_bbox(video_path: Path, max_frames: int = 150) -> Tuple[int, int,
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
     best_box: Optional[Tuple[int, int, int, int]] = None
-    max_confidence = 0.5
+    max_confidence = 0.25
     frames_checked = 0
 
     try:
@@ -115,10 +121,17 @@ def detect_face_bbox(video_path: Path, max_frames: int = 150) -> Tuple[int, int,
                 break
 
             frames_checked += 1
-            if frames_checked % 3 != 0:
+            if frames_checked % 5 != 0:
                 continue
 
-            blob = cv2.dnn.blobFromImage(cv2.resize(frame, (300, 300)), 1.0, (300, 300), (104.0, 177.0, 123.0))
+            blob = cv2.dnn.blobFromImage(
+                frame,
+                1.0,
+                (300, 300),
+                (104.0, 177.0, 123.0),
+                swapRB=False,
+                crop=False,
+            )
             net.setInput(blob)
             detections = net.forward()
 
@@ -129,28 +142,33 @@ def detect_face_bbox(video_path: Path, max_frames: int = 150) -> Tuple[int, int,
                     x1, y1, x2, y2 = box.astype("int")
                     w, h = x2 - x1, y2 - y1
 
-                    if w < 50 or h < 50:
+                    if w < 35 or h < 35 or w > (width * 0.6):
                         continue
 
                     max_confidence = confidence
-                    pad_w, pad_h = int(w * 2), int(h * 2)
-                    crop_x = max(0, x1 - pad_w // 2)
-                    crop_y = max(0, y1 - pad_h // 2)
-                    crop_w = min(width - crop_x, w + pad_w)
-                    crop_h = min(height - crop_y, h + pad_h)
+
+                    # Zoom cercano: 1.8x el tamaño del rostro (cabeza y hombros)
+                    center_x, center_y = x1 + w // 2, y1 + h // 2
+                    crop_size = max(int(w * 1.8), int(h * 1.8))
+
+                    crop_x = max(0, center_x - crop_size // 2)
+                    crop_y = max(0, center_y - crop_size // 2)
+                    crop_w = min(width - crop_x, crop_size)
+                    crop_h = min(height - crop_y, crop_size)
 
                     best_box = (crop_x, crop_y, crop_w, crop_h)
+
     except Exception as e:
         print(f"Aviso en detección facial: {e}. Usando encuadre fallback.")
     finally:
         cap.release()
 
-    return best_box or (
-        int(width * 0.7),
-        int(height * 0.05),
-        int(width * 0.28),
-        int(height * 0.35),
-    )
+    if best_box:
+        print(f"[INFO] Cara detectada con confianza {max_confidence:.2f}: {best_box}")
+        return best_box
+
+    print("[WARN] No se detectó cara. Aplicando recuadrazo predeterminado cercano.")
+    return (0, 0, int(width * 0.25), int(height * 0.35))
 
 
 def generate_subtitles_ass(
@@ -224,7 +242,9 @@ def render_vertical_clip(raw_path: Path, ass_path: Path, output_path: Path) -> N
         "-preset",
         "ultrafast",
         "-crf",
-        "18",
+        "16",
+        "-profile:v",
+        "high",
         "-pix_fmt",
         "yuv420p",
         "-c:a",
@@ -233,9 +253,7 @@ def render_vertical_clip(raw_path: Path, ass_path: Path, output_path: Path) -> N
         "192k",
         str(output_path),
     ]
-    subprocess.run(
-        cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-    )
+    subprocess.run(cmd, check=True)
 
 
 def process_video_pipeline(
