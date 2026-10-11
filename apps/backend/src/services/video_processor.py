@@ -89,7 +89,7 @@ def download_clip_segment(
 ) -> None:
     """Descarga la mejor calidad disponible (1080p+) con compatibilidad de codecs."""
     ydl_opts = {
-        "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best",
+        "format": "bestvideo[vcodec^=av01]/bestvideo[vcodec^=vp9]/bestvideo+bestaudio/best",
         "outtmpl": str(raw_path),
         "download_ranges": yt_dlp.utils.download_range_func(
             None, [(to_seconds(start_time), to_seconds(end_time))]
@@ -240,9 +240,9 @@ def render_vertical_clip(raw_path: Path, ass_path: Path, output_path: Path) -> N
         "-c:v",
         "libx264",
         "-preset",
-        "ultrafast",
+        "fast",
         "-crf",
-        "16",
+        "21",
         "-profile:v",
         "high",
         "-pix_fmt",
