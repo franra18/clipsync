@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Download, Loader2, Sparkles, AlertCircle, Video } from 'lucide-react';
+import { Play, Download, Loader2, AlertCircle, Video, Check } from 'lucide-react';
 import TimeInput from './TimeInput';
 
 const API_BASE_URL = 'http://localhost:8000/api';
@@ -27,8 +27,6 @@ export default function App() {
                 }
 
                 const data = await res.json();
-                console.log('Estado del trabajo:', data);
-
                 const currentStatus = data.status ? data.status.toUpperCase() : 'UNKNOWN';
                 setStatus(currentStatus);
 
@@ -68,8 +66,6 @@ export default function App() {
             if (!res.ok) throw new Error('Error al enviar la solicitud al servidor');
 
             const data = await res.json();
-            console.log('Job creado:', data);
-
             setJobId(data.job_id);
         } catch (err) {
             console.error(err);
@@ -79,110 +75,124 @@ export default function App() {
     };
 
     return (
-        <div className="max-w-4xl mx-auto px-4 py-12">
-            <header className="text-center mb-10">
-                <div className="inline-flex items-center gap-2 px-3 py-1 bg-amber-500/10 text-amber-400 rounded-full text-sm font-medium mb-3 border border-amber-500/20">
-                    <Sparkles className="w-4 h-4" /> Generador de Verticales 9:16
-                </div>
-                <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
-                    ClipSync
-                </h1>
-                <p className="mt-2 text-slate-400 text-lg">
-                    Convierte directos de YouTube/Twitch en clips verticales listos para TikTok o Reels.
-                </p>
-            </header>
+        <div className="min-h-screen bg-[#0d0e11] text-zinc-200 flex flex-col justify-center py-12 px-6 font-sans">
+            <div className="max-w-4xl mx-auto w-full">
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {/* Formulario */}
-                <form onSubmit={handleSubmit} className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl flex flex-col justify-between">
-                    <div className="space-y-5">
-                        <div>
-                            <label className="block text-sm font-medium text-slate-300 mb-1.5">URL del vídeo original</label>
-                            <input
-                                type="url"
-                                required
-                                placeholder="https://www.youtube.com/watch?v=..."
-                                value={videoUrl}
-                                onChange={(e) => setVideoUrl(e.target.value)}
-                                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-amber-500 transition-colors placeholder:text-slate-600"
-                            />
-                        </div>
+                {/* Cabecera */}
+                <header className="mb-12 text-center">
+                    <h1 className="text-4xl sm:text-5xl font-semibold tracking-tight text-zinc-100">
+                        ClipSync
+                    </h1>
+                    <p className="mt-3 text-base text-zinc-400 mx-auto leading-relaxed">
+                        Genera recortes verticales en formato 9:16 desde enlaces de YouTube o Twitch.
+                    </p>
+                </header>
 
-                        <div className="grid grid-cols-2 gap-4">
-                            <TimeInput
-                                label="Inicio (MM:SS)"
-                                value={startTime}
-                                onChange={setStartTime}
-                            />
-                            <TimeInput
-                                label="Fin (MM:SS)"
-                                value={endTime}
-                                onChange={setEndTime}
-                            />
-                        </div>
-                    </div>
+                {/* Grid principal */}
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-start">
 
-                    <button
-                        type="submit"
-                        disabled={status === 'QUEUED' || status === 'PROCESSING'}
-                        className="mt-6 w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold py-3 px-4 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    {/* Formulario */}
+                    <form
+                        onSubmit={handleSubmit}
+                        className="md:col-span-7 bg-[#14161b] border border-[#22252c] rounded-lg p-6 space-y-6"
                     >
-                        {status === 'QUEUED' || status === 'PROCESSING' ? (
-                            <>
-                                <Loader2 className="w-5 h-5 animate-spin" /> Procesando Clip...
-                            </>
-                        ) : (
-                            <>
-                                <Play className="w-5 h-5 fill-slate-950" /> Generar Clip Vertical
-                            </>
-                        )}
-                    </button>
-                </form>
-
-                {/* Estado y Reproductor */}
-                <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl flex flex-col items-center justify-center min-h-[360px] relative overflow-hidden">
-                    {errorMsg && (
-                        <div className="text-center p-4 text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-2">
-                            <AlertCircle className="w-5 h-5 flex-shrink-0" />
-                            <span className="text-sm">{errorMsg}</span>
-                        </div>
-                    )}
-
-                    {!status && !errorMsg && (
-                        <div className="text-center text-slate-500 space-y-2">
-                            <Video className="w-12 h-12 mx-auto stroke-[1.5]" />
-                            <p className="text-sm">Configura la URL y los tiempos para previsualizar el resultado.</p>
-                        </div>
-                    )}
-
-                    {(status === 'QUEUED' || status === 'PROCESSING') && (
-                        <div className="text-center space-y-4">
-                            <Loader2 className="w-12 h-12 text-amber-500 animate-spin mx-auto" />
+                        <div className="space-y-4">
                             <div>
-                                <p className="font-semibold text-slate-200">
-                                    {status === 'QUEUED' ? 'En cola de espera...' : 'Procesando y Renderizando...'}
-                                </p>
-                                <p className="text-xs text-slate-400 mt-1">
-                                    Whisper transcribiendo audio y recortando rostro con OpenCV.
-                                </p>
+                                <label className="block text-xs font-medium text-zinc-300 mb-2">
+                                    Enlace del vídeo
+                                </label>
+                                <input
+                                    type="url"
+                                    required
+                                    placeholder="https://www.youtube.com/watch?v=..."
+                                    value={videoUrl}
+                                    onChange={(e) => setVideoUrl(e.target.value)}
+                                    className="w-full bg-[#0b0c0e] border border-[#262a33] rounded-md px-3.5 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-400 transition-colors"
+                                />
                             </div>
-                        </div>
-                    )}
 
-                    {status === 'COMPLETED' && downloadUrl && (
-                        <div className="w-full flex flex-col items-center gap-4">
-                            <div className="w-[200px] aspect-[9/16] bg-black rounded-xl overflow-hidden shadow-2xl border border-slate-800">
-                                <video src={downloadUrl} controls className="w-full h-full object-contain" />
+                            <div className="grid grid-cols-2 gap-4 pt-2">
+                                <TimeInput
+                                    label="Tiempo inicio"
+                                    value={startTime}
+                                    onChange={setStartTime}
+                                />
+                                <TimeInput
+                                    label="Tiempo fin"
+                                    value={endTime}
+                                    onChange={setEndTime}
+                                />
                             </div>
-                            <a
-                                href={downloadUrl}
-                                download
-                                className="w-full bg-slate-800 hover:bg-slate-700 text-white font-medium py-2.5 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 text-sm"
-                            >
-                                <Download className="w-4 h-4" /> Descargar Vídeo HD
-                            </a>
                         </div>
-                    )}
+
+                        <button
+                            type="submit"
+                            disabled={status === 'QUEUED' || status === 'PROCESSING'}
+                            className="w-full bg-zinc-200 hover:bg-white text-zinc-900 font-medium py-2.5 px-4 rounded-md transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm"
+                        >
+                            {status === 'QUEUED' || status === 'PROCESSING' ? (
+                                <>
+                                    <Loader2 className="w-4 h-4 animate-spin text-zinc-800" />
+                                    <span>Generando vídeo...</span>
+                                </>
+                            ) : (
+                                <>
+                                    <Play className="w-4 h-4 fill-zinc-900" />
+                                    <span>Generar clip</span>
+                                </>
+                            )}
+                        </button>
+                    </form>
+
+                    {/* Área de resultado / Vista previa */}
+                    <div className="md:col-span-5 bg-[#14161b] border border-[#22252c] rounded-lg p-6 min-h-[380px] flex flex-col items-center justify-center relative">
+
+                        {errorMsg && (
+                            <div className="w-full p-4 bg-red-950/30 border border-red-900/50 rounded-md text-red-300 flex items-start gap-3">
+                                <AlertCircle className="w-4 h-4 flex-shrink-0 text-red-400 mt-0.5" />
+                                <span className="text-xs leading-relaxed">{errorMsg}</span>
+                            </div>
+                        )}
+
+                        {!status && !errorMsg && (
+                            <div className="text-center text-zinc-500 space-y-2">
+                                <Video className="w-8 h-8 mx-auto stroke-[1.25] text-zinc-600" />
+                                <p className="text-xs text-zinc-400 max-w-[200px]">
+                                    El resultado final aparecerá aquí una vez procesado.
+                                </p>
+                            </div>
+                        )}
+
+                        {(status === 'QUEUED' || status === 'PROCESSING') && (
+                            <div className="text-center space-y-3">
+                                <Loader2 className="w-6 h-6 text-zinc-400 animate-spin mx-auto" />
+                                <div>
+                                    <p className="text-xs font-medium text-zinc-200">
+                                        {status === 'QUEUED' ? 'En cola de espera' : 'Procesando clip'}
+                                    </p>
+                                    <p className="text-[11px] text-zinc-500 mt-1 max-w-[220px]">
+                                        Extrayendo fragmento y ajustando encuadre.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+
+                        {status === 'COMPLETED' && downloadUrl && (
+                            <div className="w-full flex flex-col items-center gap-4">
+                                <div className="w-[180px] aspect-[9/16] bg-black rounded border border-[#22252c] overflow-hidden shadow-sm">
+                                    <video src={downloadUrl} controls className="w-full h-full object-contain" />
+                                </div>
+
+                                <a
+                                    href={downloadUrl}
+                                    download
+                                    className="w-full bg-[#1e2129] hover:bg-[#252933] text-zinc-200 border border-[#2d323e] font-medium py-2 px-3 rounded-md transition-colors flex items-center justify-center gap-2 text-xs"
+                                >
+                                    <Download className="w-3.5 h-3.5" /> Descargar archivo
+                                </a>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>

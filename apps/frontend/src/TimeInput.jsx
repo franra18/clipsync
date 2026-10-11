@@ -38,7 +38,7 @@ export default function TimeInput({ label, value = '00:00', onChange }) {
 
     return (
         <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1.5">
+            <label className="block text-xs font-medium text-zinc-300 mb-2">
                 {label}
             </label>
             <input
@@ -48,7 +48,7 @@ export default function TimeInput({ label, value = '00:00', onChange }) {
                 onKeyDown={handleKeyDown}
                 onChange={() => { }} // Prevenimos la modificación por evento nativo para delegar a onKeyDown
                 placeholder="00:00"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-center font-mono focus:outline-none focus:border-amber-500 transition-colors select-none"
+                className="w-full bg-[#0b0c0e] border border-[#262a33] rounded-md px-3.5 py-2 text-sm text-center font-mono text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-400 transition-colors select-none"
             />
         </div>
     );
