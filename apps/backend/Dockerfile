@@ -8,7 +8,6 @@ ENV PYTHONUNBUFFERED=1 \
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
-    wget \
     ca-certificates \
     libgl1 \
     libglib2.0-0 \
@@ -17,12 +16,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Descargar modelo DNN Face Detector directamente en las rutas esperadas
-RUN wget -q https://raw.githubusercontent.com/opencv/opencv_3rdparty/dnn_samples_face_detector_20170830/res10_300x300_ssd_iter_140000.caffemodel -O $MODEL_CAFFE_PATH \
-    && wget -q https://raw.githubusercontent.com/opencv/opencv/master/samples/dnn/face_detector/deploy.prototxt -O $MODEL_PROTO_PATH
-
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Modelo DNN Face Detector (versionado en el repo)
+COPY deploy.prototxt res10_300x300_ssd_iter_140000.caffemodel ./
 
 COPY src/ ./src/
 

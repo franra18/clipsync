@@ -4,8 +4,8 @@ services:
     container_name: clipsync-minio
     command: server /data --console-address ":9001"
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
     environment:
       MINIO_ROOT_USER: admin
       MINIO_ROOT_PASSWORD: password123
@@ -17,7 +17,7 @@ services:
     image: redis:7-alpine
     container_name: clipsync-redis
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     restart: unless-stopped
 
   worker:
@@ -35,6 +35,7 @@ services:
       - PYTHONPATH=/app
     volumes:
       - ./apps/backend:/app
+      - whisper_cache:/root/.cache/huggingface
     depends_on:
       - redis
       - minio
@@ -47,7 +48,7 @@ services:
     command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
     container_name: clipsync-api
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
@@ -68,7 +69,7 @@ services:
     working_dir: /app
     command: sh -c "corepack enable && pnpm install && pnpm dev --host"
     ports:
-      - "5173:5173"
+      - "127.0.0.1:5173:5173"
     volumes:
       - ./apps/frontend:/app
       - /app/node_modules
@@ -78,3 +79,4 @@ services:
 
 volumes:
   minio_data:
+  whisper_cache:
