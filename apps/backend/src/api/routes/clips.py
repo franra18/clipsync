@@ -1,12 +1,13 @@
 import json
 import uuid
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, HttpUrl, Field
+from pydantic import BaseModel, HttpUrl, Field, model_validator
 from typing import Optional
 import redis
 
 from src.core.config import REDIS_HOST, REDIS_PORT
 from src.core.storage import generate_presigned_download_url
+from src.core.timecode import to_seconds
 
 router = APIRouter(prefix="/api/clips", tags=["Clips"])
 redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=0, decode_responses=True)
@@ -15,6 +16,12 @@ class ClipCreateRequest(BaseModel):
     video_url: HttpUrl
     start_time: str = Field(..., example="00:05")
     end_time: str = Field(..., example="00:15")
+
+    @model_validator(mode="after")
+    def check_times(self):
+        if to_seconds(self.end_time) <= to_seconds(self.start_time):
+            raise ValueError("El tiempo de fin debe ser mayor que el de inicio")
+        return self
 
 class ClipResponse(BaseModel):
     job_id: str
@@ -32,6 +39,7 @@ def create_clip(payload: ClipCreateRequest):
     }
     
     redis_client.hset(f"job:{job_id}", mapping={"status": "QUEUED"})
+    redis_client.expire(f"job:{job_id}", 86400)
     redis_client.rpush("clip_jobs", json.dumps(job_data))
     
     return ClipResponse(job_id=job_id, status="QUEUED")
@@ -54,4 +62,5 @@ def get_clip_status(job_id: str):
         "job_id": job_id,
         "status": status,
         "download_url": download_url,
+        "error": job_data.get("error"),
     }
