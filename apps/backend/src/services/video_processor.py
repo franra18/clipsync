@@ -1,7 +1,6 @@
 import os
 import shutil
 import subprocess
-import urllib.request
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -11,6 +10,7 @@ from faster_whisper import WhisperModel
 
 from src.core.config import MINIO_BUCKET
 from src.core.storage import s3_client
+from src.core.timecode import to_seconds
 
 # ==========================================
 # CONSTANTES Y CONFIGURACIÓN
@@ -35,44 +35,14 @@ WHISPER_MODEL = WhisperModel("base", device="cpu", compute_type="int8")
 _FACE_NET = None
 
 
-def ensure_models_exist() -> None:
-    """Garantiza que los modelos Caffe existan localmente descargándolos si el volumen los pisó."""
-    MODEL_DIR.mkdir(parents=True, exist_ok=True)
-
-    if not MODEL_PROTO_PATH.exists():
-        print("Descargando deploy.prototxt...")
-        urllib.request.urlretrieve(
-            "https://raw.githubusercontent.com/opencv/opencv/master/samples/dnn/face_detector/deploy.prototxt",
-            MODEL_PROTO_PATH,
-        )
-
-    if not MODEL_CAFFE_PATH.exists():
-        print("Descargando res10_300x300_ssd_iter_140000.caffemodel...")
-        urllib.request.urlretrieve(
-            "https://raw.githubusercontent.com/opencv/opencv_3rdparty/dnn_samples_face_detector_20170830/res10_300x300_ssd_iter_140000.caffemodel",
-            MODEL_CAFFE_PATH,
-        )
-
-
 def get_face_net():
     """Carga perezosa (lazy load) del detector neuronal Caffe."""
     global _FACE_NET
     if _FACE_NET is None:
-        ensure_models_exist()
         _FACE_NET = cv2.dnn.readNetFromCaffe(
             str(MODEL_PROTO_PATH), str(MODEL_CAFFE_PATH)
         )
     return _FACE_NET
-
-
-def to_seconds(time_str: str) -> int:
-    """Convierte cadenas de tiempo (MM:SS / HH:MM:SS) a segundos."""
-    parts = list(map(int, time_str.split(":")))
-    if len(parts) == 2:
-        return parts[0] * 60 + parts[1]
-    if len(parts) == 3:
-        return parts[0] * 3600 + parts[1] * 60 + parts[2]
-    return 0
 
 
 def format_time_ass(seconds: float) -> str:
@@ -87,9 +57,16 @@ def format_time_ass(seconds: float) -> str:
 def download_clip_segment(
     video_url: str, start_time: str, end_time: str, raw_path: Path
 ) -> None:
-    """Descarga la mejor calidad disponible (1080p+) con compatibilidad de codecs."""
+    """Descarga el tramo pedido hasta 1440p, con audio, unido en MP4."""
     ydl_opts = {
-        "format": "bestvideo[vcodec^=av01]/bestvideo[vcodec^=vp9]/bestvideo+bestaudio/best",
+        # 1440p da más píxeles reales a la cámara, que luego se amplía x3-x4
+        "format": "bv*[height<=1440]+ba/b",
+        "merge_output_format": "mp4",
+        # Con force_keyframes_at_cuts yt-dlp recodifica con los defaults de FFmpeg (CRF 23);
+        # casi sin pérdida aquí, porque el render final vuelve a codificar
+        "external_downloader_args": {
+            "ffmpeg_o": ["-c:v", "libx264", "-crf", "10", "-preset", "veryfast", "-c:a", "copy"]
+        },
         "outtmpl": str(raw_path),
         "download_ranges": yt_dlp.utils.download_range_func(
             None, [(to_seconds(start_time), to_seconds(end_time))]
@@ -116,13 +93,16 @@ def detect_face_bbox(video_path: Path, max_frames: int = 150) -> Tuple[int, int,
         net = get_face_net()
 
         while cap.isOpened() and frames_checked < max_frames:
+            frames_checked += 1
+            # grab() avanza sin decodificar el frame: solo analizamos 1 de cada 5
+            if frames_checked % 5 != 0:
+                if not cap.grab():
+                    break
+                continue
+
             ret, frame = cap.read()
             if not ret:
                 break
-
-            frames_checked += 1
-            if frames_checked % 5 != 0:
-                continue
 
             blob = cv2.dnn.blobFromImage(
                 frame,
@@ -176,7 +156,7 @@ def generate_subtitles_ass(
 ) -> None:
     """Genera subtítulos .ass animados en bloques cortos de palabras."""
     segments, _ = WHISPER_MODEL.transcribe(
-        str(audio_video_path), beam_size=5, word_timestamps=True
+        str(audio_video_path), beam_size=1, vad_filter=True, word_timestamps=True
     )
 
     words_list = [
@@ -219,7 +199,9 @@ def render_vertical_clip(raw_path: Path, ass_path: Path, output_path: Path) -> N
     filter_complex = (
         f"[0:v]crop={crop_w}:{crop_h}:{crop_x}:{crop_y},"
         f"scale={OUTPUT_WIDTH}:{CAM_HEIGHT}:force_original_aspect_ratio=increase:flags=lanczos,"
-        f"crop={OUTPUT_WIDTH}:{CAM_HEIGHT}[cam];"
+        f"crop={OUTPUT_WIDTH}:{CAM_HEIGHT},"
+        # Enfoque suave para compensar el reescalado (solo luminancia)
+        f"unsharp=5:5:0.6:5:5:0.0[cam];"
         f"[0:v]scale={OUTPUT_WIDTH}:{GAME_HEIGHT}:force_original_aspect_ratio=increase:flags=lanczos,"
         f"crop={OUTPUT_WIDTH}:{GAME_HEIGHT}[game];"
         f"[cam][game]vstack=inputs=2,"
@@ -274,7 +256,8 @@ def process_video_pipeline(
 
         object_name = f"clips/{job_id}.mp4"
         s3_client.upload_file(
-            Filename=str(final_output), Bucket=MINIO_BUCKET, Key=object_name
+            Filename=str(final_output), Bucket=MINIO_BUCKET, Key=object_name,
+            ExtraArgs={"ContentType": "video/mp4"},
         )
         return object_name
     finally:
