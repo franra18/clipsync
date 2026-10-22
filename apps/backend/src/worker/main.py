@@ -2,15 +2,29 @@ import json
 import time
 import redis
 from src.core.config import REDIS_HOST, REDIS_PORT
+from src.core.storage import ensure_bucket
 from src.services.video_processor import process_video_pipeline
+
+QUEUE = "clip_jobs"
+PROCESSING = "clip_jobs:processing"
 
 def start_worker():
     r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=0, decode_responses=True)
+    ensure_bucket()
+
+    # Devuelve a la cola los trabajos que quedaron a medias si el worker se cayó
+    while r.lmove(PROCESSING, QUEUE, "RIGHT", "LEFT"):
+        pass
+
     print(f"🚀 Worker escuchando Redis en {REDIS_HOST}:{REDIS_PORT}...")
     
     while True:
+        job_id = None
+        # Espera corta: redis-py 8 corta la conexión a los 5 s por defecto (socket_timeout)
+        message = r.blmove(QUEUE, PROCESSING, 2, "LEFT", "RIGHT")
+        if message is None:
+            continue
         try:
-            _, message = r.blpop("clip_jobs")
             job_data = json.loads(message)
             job_id = job_data["job_id"]
             
@@ -33,10 +47,12 @@ def start_worker():
             print(f"[{job_id}] 🎉 Proceso finalizado y marcado como COMPLETED!")
             
         except Exception as e:
-            print(f"Error procesando trabajo {job_id if 'job_id' in locals() else ''}: {e}")
-            if 'job_id' in locals():
+            print(f"Error procesando trabajo {job_id or ''}: {e}")
+            if job_id:
                 r.hset(f"job:{job_id}", mapping={"status": "FAILED", "error": str(e)})
             time.sleep(1)
+        finally:
+            r.lrem(PROCESSING, 1, message)
 
 if __name__ == "__main__":
     start_worker()
