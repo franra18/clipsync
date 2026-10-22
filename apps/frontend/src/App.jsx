@@ -29,16 +29,19 @@ export default function App() {
                 const data = await res.json();
                 const currentStatus = data.status ? data.status.toUpperCase() : 'UNKNOWN';
                 setStatus(currentStatus);
+                setErrorMsg(null);
 
                 if (currentStatus === 'COMPLETED') {
                     setDownloadUrl(data.download_url);
                     clearInterval(interval);
                 } else if (currentStatus === 'FAILED') {
-                    setErrorMsg('Ocurrió un error al procesar el vídeo.');
+                    setErrorMsg(data.error || 'Ocurrió un error al procesar el vídeo.');
                     clearInterval(interval);
                 }
             } catch (err) {
                 console.error('Error durante el polling:', err);
+                // Se sigue consultando: la API puede estar reiniciándose (--reload)
+                setErrorMsg('No se puede contactar con la API. Reintentando...');
             }
         }, 2000);
 
@@ -63,9 +66,10 @@ export default function App() {
                 }),
             });
 
-            if (!res.ok) throw new Error('Error al enviar la solicitud al servidor');
+            const data = await res.json().catch(() => ({}));
+            // 422 de FastAPI: detail es una lista de errores de validación
+            if (!res.ok) throw new Error(data.detail?.[0]?.msg || 'Error al enviar la solicitud al servidor');
 
-            const data = await res.json();
             setJobId(data.job_id);
         } catch (err) {
             console.error(err);
